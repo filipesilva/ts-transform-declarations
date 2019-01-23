@@ -41,20 +41,34 @@ fileMap.forEach((v, k) => sourcesMap.set(
 const program = ts.createProgram(['/file.ts'], compilerOptions, host);
 const sourceFile = program.getSourceFile('/file.ts');
 
-// Simple transform that logs the filename of what it's transforming.
-const logFileTransform: ts.TransformerFactory<ts.Bundle | ts.SourceFile> = () =>
+// Simple transform that logs the filename of what it's transforming and renames identifiers.
+const logFileAndRenameTransform: ts.TransformerFactory<ts.SourceFile> = (context) =>
   (bundleOrSourceFile) => {
     if (ts.isBundle(bundleOrSourceFile)) {
-      console.log('logFileTransform: transforming bundle');
+      console.log('logFileAndRenameTransform: transforming bundle');
+      return bundleOrSourceFile;
     } else {
-      console.log(`logFileTransform: transforming source file: ${bundleOrSourceFile.fileName}`);
+      console.log(`logFileAndRenameTransform: transforming source file: ${bundleOrSourceFile.fileName}`);
+
+      const visitor: ts.Visitor = (node: ts.Node): ts.VisitResult<ts.Node> => {
+        if (ts.isIdentifier(node)) {
+          return ts.createIdentifier('renamedIdentifier');
+        }
+
+        // Otherwise return node as is.
+        return ts.visitEachChild(node, visitor, context);
+      };
+
+      return ts.visitNode(bundleOrSourceFile, visitor);
     }
-    return bundleOrSourceFile;
   };
 
 // Emit file.ts, using removeTransform.
 const { emitSkipped } = program.emit(
-  sourceFile, undefined, undefined, undefined, { afterDeclarations: [logFileTransform] }
+  sourceFile, undefined, undefined, undefined, { 
+    before: [logFileAndRenameTransform],
+    afterDeclarations: [logFileAndRenameTransform],
+  }
 );
 
 if (emitSkipped) {
